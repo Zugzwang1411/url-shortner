@@ -8,17 +8,28 @@
   <link rel="stylesheet" href="style.css" type="text/css">
 </head>
 <body>
+  <header class="header-section">
+    <div class="search-container">
+      <input class="search-input" type="text" placeholder="Search by URL" required name="term">
+      <button type="submit" class="search-button">Search</button>
+    </div>
+    <button class="add-new-button">Add New</button>
+  </header>
   <main>
-    <section class="form-section">
-      <h1 class="page-title">URL Shortener</h1>
-      <form class="url-form">
-        <input class="url-input" type="url" placeholder="Paste in a link to shorten it"
-        required name="url" autofocus>
-        <button type="submit" class="submit-button">Shorten!</button>
-      </form>
+    <section class="result-section">
+      <div class="search-results"></div>
     </section>
-    <section class="result-section"></section>
   </main>
+  <div class="modal-overlay"></div>
+  <div class="modal">
+    <h2 class="modal-title">Add New URL</h2>
+    <form class="modal-form">
+      <input class="url-input" type="url" placeholder="Paste in a link to shorten it" required name="url">
+      <button type="submit" class="submit-button">Shorten!</button>
+    </form>
+    <div class="modal-result"></div>
+    <button class="done-button">Done</button>
+  </div>
   <script src="main.js"></script>
 </body>
 </html>

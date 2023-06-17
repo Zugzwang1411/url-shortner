@@ -100,10 +100,6 @@ const checkIfShortIdExists = (db, code) => db.collection('shortenedURLs')
       .find({ original_url: { $regex: searchTerm, $options: 'i' } })
       .toArray()
       .then(docs => {
-        if (docs.length === 0) {
-          return res.send('No matching URLs found');
-        }
-  
         const searchResults = docs.map(doc => ({
           original_url: doc.original_url,
           short_id: doc.short_id,
