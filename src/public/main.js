@@ -11,13 +11,54 @@ document.addEventListener("DOMContentLoaded", () => {
 
   getAllURLs()
   .then((data) => {
-    console.log(data)
     showSearchResults(data);
   })
   .catch((error) => {
     showError(error);
   });
+  searchInput.addEventListener("input", () => {
+    const searchTerm = searchInput.value;
+    if (searchTerm.length >= 3) { 
+      autoCompleteSearch(searchTerm)
+        .then((data) => {
+          showAutoCompleteResults(data);
+        })
+        .catch((error) => {
+          showError(error);
+        });
+    } else {
+      searchResultsContainer.innerHTML = "";
+    }
+  });
 
+  function autoCompleteSearch(term) {
+    return fetch(`/autocomplete?term=${term}`)
+      .then((response) => response.json())
+      .then((data) => {
+        console.log(data)
+        return data.results;
+      });
+  }
+
+  function showAutoCompleteResults(results) {
+    searchResultsContainer.innerHTML = "";
+
+    if (results.length === 0) {
+      searchResultsContainer.innerHTML = "<p>No results found.</p>";
+      return;
+    }
+
+    results.forEach((result) => {
+      const resultCard = document.createElement("div");
+      resultCard.classList.add("result-card");
+
+      const title = document.createElement("p");
+      title.innerText = result;
+
+      resultCard.appendChild(title);
+      searchResultsContainer.appendChild(resultCard);
+    });
+  }
   modalForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const urlInput = document.querySelector(".url-input");
