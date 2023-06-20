@@ -115,34 +115,44 @@ document.addEventListener("DOMContentLoaded", () => {
       searchInput.value = "";
     });
 
-    function getAllURLs() {
-      return fetch("/all")
-        .then((response) => response.json())
-        .then((data) => {
-          return data.results;
-        });
+    async function getAllURLs() {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/all', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token
+        }
+      });
+      const data = await response.json();
+      return data.results;
     }
 
-    function shortenURL(url, note) {
-      return fetch("/new", {
+    async function shortenURL(url, note) {
+      const token = localStorage.getItem('token');
+      const response = await fetch("/new", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          'Authorization': token
         },
         body: JSON.stringify({ url, note }),
-      })
-        .then((response) => response.json())
-        .then((data) => {
-          return data;
-        });
+      });
+      const data = await response.json();
+      return data;
     }
 
-    function searchURLs(term) {
-      return fetch(`/search?term=${term}`)
-        .then((response) => response.json())
-        .then((data) => {
-          return data.results;
-        });
+    async function searchURLs(term) {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/search?term=${term}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token
+        }
+      });
+      const data = await response.json();
+      return data.results;
     }
 
     function openModal() {
@@ -212,12 +222,17 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    function autoCompleteSearch(term) {
-      return fetch(`/autocomplete?term=${term}`)
-        .then((response) => response.json())
-        .then((data) => {
-          return data.results;
-        });
+    async function autoCompleteSearch(term) {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/autocomplete?term=${term}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token
+        }
+      });
+      const data = await response.json();
+      return data.results;
     }
 
     function showAutoCompleteResults(results) {

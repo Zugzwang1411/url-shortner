@@ -6,9 +6,10 @@ const path = require("path");
 const { MongoClient } = require("mongodb");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
+const nanoid = require("nanoid");
 const databaseUrl = process.env.DATABASE;
 const secretKey = process.env.SECRET_KEY;
+const dns = require("dns");
 
 const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -22,27 +23,26 @@ const db = client.db();
 const shortenedURLs = db.collection("shortenedURLs");
 const usersCollection = db.collection("users");
 
-const shortenURL = (url, note) => {
-  return shortenedURLs.findOne({ original_url: url }).then((existingDoc) => {
+const shortenURL = (url, note, username) => {
+  return shortenedURLs.findOne({ original_url: url, user: username
+  }).then((existingDoc) => {
     if (existingDoc) {
       const response = {
         urlExists: true,
         value: existingDoc,
       };
-      return response; // Return the existing document
+      return response;
     } else {
       const newDocument = {
         original_url: url,
         short_id: nanoid(7),
         note: note,
         clicks: 0,
+        user: username,
       };
-      return {
-        urlExists: true,
-        ...shortenedURLs
+      return shortenedURLs
           .insertOne(newDocument)
-          .then(() => ({ value: newDocument })),
-      };
+          .then(() => ({urlExists: false, value: newDocument }))
     }
   });
 };
@@ -95,6 +95,7 @@ app.get("/verify", (req, res) => {
       return res.status(401).json({ error: "Invalid token" });
     }
     const username = decoded.username;
+    console.log(username)
     res.json({ message: `Hello, ${username}! This is a protected route.` });
   });
 });
@@ -138,6 +139,17 @@ app.get("/autocomplete", (req, res) => {
 });
 
 app.post("/new", (req, res) => {
+  const token = req.headers.authorization.trim();
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const username = jwt.verify(token, secretKey, (err, decoded) => {
+    if (err) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+    return decoded.username;
+  });
+
   let originalUrl;
   try {
     originalUrl = new URL(req.body.url);
@@ -152,8 +164,9 @@ app.post("/new", (req, res) => {
 
     const note = req.body.note || "";
 
-    shortenURL(originalUrl.href, note)
+    shortenURL(originalUrl.href, note, username)
       .then((result) => {
+        console.log("result", result)
         if (!result || !result.value) {
           throw new Error("Failed to shorten URL");
         }
@@ -173,8 +186,18 @@ app.post("/new", (req, res) => {
 });
 
 app.get("/all", (req, res) => {
+  const token = req.headers.authorization.trim();
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const username = jwt.verify(token, secretKey, (err, decoded) => {
+    if (err) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+    return decoded.username;
+  });
   shortenedURLs
-    .find({})
+    .find({user: username})
     .toArray()
     .then((urls) => {
       res.json({ results: urls });
@@ -187,6 +210,16 @@ app.get("/all", (req, res) => {
 });
 
 app.get("/search", (req, res) => {
+  const token = req.headers.authorization.trim();
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const username = jwt.verify(token, secretKey, (err, decoded) => {
+    if (err) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+    return decoded.username;
+  });
   const searchTerm = req.query.term;
 
   if (!searchTerm) {
@@ -194,7 +227,7 @@ app.get("/search", (req, res) => {
   }
 
   shortenedURLs
-    .find({ $text: { $search: searchTerm } })
+    .find({ user: username, $text: { $search: searchTerm } })
     .project({ score: { $meta: "textScore" } })
     .sort({ score: { $meta: "textScore" } })
     .toArray()
