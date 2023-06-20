@@ -3,11 +3,12 @@ require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const path = require("path");
-const dns = require("dns");
 const { MongoClient } = require("mongodb");
-const nanoid = require("nanoid");
-
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const databaseUrl = process.env.DATABASE;
+const secretKey = process.env.SECRET_KEY;
 
 const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -19,6 +20,7 @@ const client = new MongoClient(databaseUrl);
 
 const db = client.db();
 const shortenedURLs = db.collection("shortenedURLs");
+const usersCollection = db.collection("users");
 
 const shortenURL = (url, note) => {
   return shortenedURLs.findOne({ original_url: url }).then((existingDoc) => {
@@ -51,14 +53,58 @@ const checkIfShortIdExists = (code) =>
 const incrementClicks = (code) =>
   shortenedURLs.findOneAndUpdate({ short_id: code }, { $inc: { clicks: 1 } });
 
+app.post("/register", async (req, res) => {
+  const { username, password } = req.body;
+  const existingUser = await usersCollection.findOne({ username });
+  if (existingUser) {
+    return res.status(409).json({ error: "Username already exists" });
+  }
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(password, salt);
+
+  const newUser = { username, password: hashedPassword };
+  await usersCollection.insertOne(newUser);
+
+  res.status(201).json({ message: "User registered successfully" });
+});
+
+app.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+  const user = await usersCollection.findOne({ username });
+  if (!user) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+  const passwordMatch = await bcrypt.compare(password, user.password);
+  if (!passwordMatch) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+  const token = jwt.sign({ username: user.username }, secretKey, {
+    expiresIn: "1h",
+  });
+  res.status(200).json({ token });
+});
+
+app.get("/verify", (req, res) => {
+  const token = req.headers.authorization.trim();
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  jwt.verify(token, secretKey, (err, decoded) => {
+    if (err) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+    const username = decoded.username;
+    res.json({ message: `Hello, ${username}! This is a protected route.` });
+  });
+});
+
 app.get("/autocomplete", (req, res) => {
   const searchTerm = req.query.term;
 
   if (!searchTerm) {
     return res.status(400).send({ error: "Search term not provided" });
   }
-  console.log(searchTerm);
-  console.log(searchTerm)
   try {
     let result = shortenedURLs
       .aggregate([
@@ -82,8 +128,8 @@ app.get("/autocomplete", (req, res) => {
             ],
           },
         },
-      ]).toArray()
-    console.log(result);
+      ])
+      .toArray();
     res.send(result);
   } catch (error) {
     console.error(error);
@@ -108,7 +154,6 @@ app.post("/new", (req, res) => {
 
     shortenURL(originalUrl.href, note)
       .then((result) => {
-        console.log(result);
         if (!result || !result.value) {
           throw new Error("Failed to shorten URL");
         }
@@ -178,7 +223,7 @@ app.get("/:short_id", (req, res) => {
         return res.send("Uh oh. We could not find a link at that URL");
 
       res.redirect(doc.original_url);
-      incrementClicks(shortId); // Increment clicks when the short URL is visited
+      incrementClicks(shortId);
     })
     .catch(console.error);
 });
