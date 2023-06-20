@@ -15,123 +15,152 @@ app.use(bodyParser.json());
 
 app.use(express.static(path.join(__dirname, "public")));
 
-MongoClient.connect(databaseUrl, { useNewUrlParser: true })
+MongoClient.connect(databaseUrl, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  retryWrites: true,
+  w: "majority",
+})
   .then((client) => {
-    app.locals.db = client.db("shortener");
-  })
-  .catch(() => console.error("Failed to connect to the database"));
-
-  const shortenURL = (db, url) => {
+    const db = client.db();
     const shortenedURLs = db.collection("shortenedURLs");
-    return shortenedURLs.findOneAndUpdate(
-      { original_url: url },
-      {
-        $setOnInsert: {
-          original_url: url,
-          short_id: nanoid(7),
-        },
-      },
-      {
-        returnOriginal: false,
-        upsert: true,
-      }
-    )
-      .then(result => {
-        if (result && result.value) {
-          return result; // Return the updated document if found
-        } else {
-          // Insert a new document if no match found
-          const newDocument = {
-            original_url: url,
-            short_id: nanoid(7),
-          };
-          return shortenedURLs.insertOne(newDocument)
-            .then(() => ({ value: newDocument }));
-        }
-      });
-  };
-  
 
-const checkIfShortIdExists = (db, code) => db.collection('shortenedURLs')
-  .findOne({ short_id: code });
-
-  app.post('/new', (req, res) => {
-    let originalUrl;
-    try {
-      originalUrl = new URL(req.body.url);
-    } catch (err) {
-      return res.status(400).send({ error: 'Invalid URL' });
-    }
-  
-    dns.lookup(originalUrl.hostname, (err) => {
-      if (err) {
-        return res.status(404).send({ error: 'Address not found' });
-      }
-  
-      const { db } = req.app.locals;
-      shortenURL(db, originalUrl.href)
-        .then(result => {
-          if (!result || !result.value) {
-            throw new Error('Failed to shorten URL');
+    const shortenURL = (url, note) => {
+      return shortenedURLs
+        .findOne({ original_url: url })
+        .then((existingDoc) => {
+          if (existingDoc) {
+            const response = {
+              urlExists: true,
+              value: existingDoc,
+            };
+            return response; // Return the existing document
+          } else {
+            const newDocument = {
+              original_url: url,
+              short_id: nanoid(7),
+              note: note,
+              clicks: 0,
+            };
+            return {
+              urlExists: true,
+              ...shortenedURLs
+                .insertOne(newDocument)
+                .then(() => ({ value: newDocument })),
+            };
           }
-          const doc = result.value;
-          res.json({
-            original_url: doc.original_url,
-            short_id: doc.short_id,
+        });
+    };
+
+    const checkIfShortIdExists = (code) =>
+      shortenedURLs.findOne({ short_id: code });
+
+    const incrementClicks = (code) =>
+      shortenedURLs.findOneAndUpdate(
+        { short_id: code },
+        { $inc: { clicks: 1 } }
+      );
+
+    app.post("/new", (req, res) => {
+      let originalUrl;
+      try {
+        originalUrl = new URL(req.body.url);
+      } catch (err) {
+        return res.status(400).send({ error: "Invalid URL" });
+      }
+
+      dns.lookup(originalUrl.hostname, (err) => {
+        if (err) {
+          return res.status(404).send({ error: "Address not found" });
+        }
+
+        const note = req.body.note || "";
+
+        shortenURL(originalUrl.href, note)
+          .then((result) => {
+            console.log(result);
+            if (!result || !result.value) {
+              throw new Error("Failed to shorten URL");
+            }
+            res.json({
+              urlExists: result.urlExists,
+              original_url: result.value.original_url,
+              short_id: result.value.short_id,
+              note: result.value.note,
+              clicks: result.value.clicks,
+            });
+          })
+          .catch((error) => {
+            console.error(error);
+            res.status(500).send({ error: "Internal server error" });
           });
+      });
+    });
+    
+    app.get("/all", (req, res) => {
+      shortenedURLs
+        .find({})
+        .toArray()
+        .then((urls) => {
+          res.json({ results: urls });
         })
-        .catch(error => {
-          console.error(error);
-          res.status(500).send({ error: 'Internal server error' });
+        .catch((error) => {
+          res.status(500).json({ error: "An error occurred while retrieving URLs." });
         });
     });
-  });  
-  app.get('/search', (req, res) => {
-    const searchTerm = req.query.term;
-  
-    if (!searchTerm) {
-      return res.status(400).send({ error: 'Search term not provided' });
-    }
-  
-    const { db } = req.app.locals;
-    const shortenedURLs = db.collection("shortenedURLs");
-  
-    shortenedURLs
-      .find({ original_url: { $regex: searchTerm, $options: 'i' } })
-      .toArray()
-      .then(docs => {
-        const searchResults = docs.map(doc => ({
-          original_url: doc.original_url,
-          short_id: doc.short_id,
-        }));
-  
-        res.json({ results: searchResults });
-      })
-      .catch(error => {
-        console.error(error);
-        res.status(500).send({ error: 'Internal server error' });
-      });
-  });
-  
-  app.get('/:short_id', (req, res) => {
-    const shortId = req.params.short_id;
-  
-    const { db } = req.app.locals;
-    checkIfShortIdExists(db, shortId)
-      .then(doc => {
-        if (doc === null) return res.send('Uh oh. We could not find a link at that URL');
-  
-        res.redirect(doc.original_url)
-      })
-      .catch(console.error);
-  });
 
-app.get("/", (req, res) => {
-  const htmlPath = path.join(__dirname, "public", "index.html");
-  res.sendFile(htmlPath);
-});
+    app.get("/search", (req, res) => {
+      const searchTerm = req.query.term;
 
-app.set("port", process.env.PORT || 4100);
-const server = app.listen(app.get("port"), () => {
-  console.log(`Express running → PORT ${server.address().port}`);
-});
+      if (!searchTerm) {
+        return res.status(400).send({ error: "Search term not provided" });
+      }
+
+      shortenedURLs
+        .find({ $text: { $search: searchTerm } })
+        .project({ score: { $meta: "textScore" } })
+        .sort({ score: { $meta: "textScore" } })
+        .toArray()
+        .then((docs) => {
+          const searchResults = docs.map((doc) => ({
+            original_url: doc.original_url,
+            short_id: doc.short_id,
+            note: doc.note,
+            clicks: doc.clicks,
+          }));
+
+          res.json({ results: searchResults });
+        })
+        .catch((error) => {
+          console.error(error);
+          res.status(500).send({ error: "Internal server error" });
+        });
+    });
+
+    app.get("/:short_id", (req, res) => {
+      const shortId = req.params.short_id;
+
+      checkIfShortIdExists(shortId)
+        .then((doc) => {
+          if (doc === null)
+            return res.send("Uh oh. We could not find a link at that URL");
+
+          res.redirect(doc.original_url);
+          incrementClicks(shortId); // Increment clicks when the short URL is visited
+        })
+        .catch(console.error);
+    });
+
+    app.get("/", (req, res) => {
+      const htmlPath = path.join(__dirname, "public", "index.html");
+      res.sendFile(htmlPath);
+    });
+
+    app.set("port", process.env.PORT || 4100);
+    const server = app.listen(app.get("port"), () => {
+      console.log(`Express running → PORT ${server.address().port}`);
+    });
+  })
+  .catch((error) => {
+    console.error("Failed to connect to the database", error);
+  });

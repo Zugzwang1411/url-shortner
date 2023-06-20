@@ -94,7 +94,16 @@ body {
 }
 
 .url-input {
-  width: 80%;
+  width: 97%;
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+
+.note-input {
+  width: 97%;
   padding: 10px;
   font-size: 16px;
   border: 1px solid #ccc;
@@ -134,19 +143,36 @@ body {
   border-radius: 4px;
 }
 
-.search-results {
-  margin-top: 20px;
-}
-
-.search-results li {
+.result-card {
+  background-color: #f8f9fa;
+  padding: 10px;
+  border-radius: 5px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
   margin-bottom: 10px;
 }
 
-.search-results a {
-  color: #007bff;
-  text-decoration: none;
+.result-card p {
+  margin: 0;
+  line-height: 1.5;
 }
 
-.search-results a:hover {
+.result-card a {
+  color: #007bff;
+  text-decoration: none;
+  width: auto;
+}
+
+.result-card a:hover {
   text-decoration: underline;
+}
+
+.clicks-count {
+  font-size: 14px;
+  color: #777;
+  margin-top: 5px;
+}
+.error {
+  color: red;
+  font-weight: bold;
+  margin-bottom: 10px;
 }

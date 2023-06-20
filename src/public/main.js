@@ -1,112 +1,158 @@
-const searchContainer = document.querySelector('.search-container');
-const searchInput = document.querySelector('.search-input');
-const searchButton = document.querySelector('.search-button');
-const addNewButton = document.querySelector('.add-new-button');
-const modalOverlay = document.querySelector('.modal-overlay');
-const modal = document.querySelector('.modal');
-const modalForm = document.querySelector('.modal-form');
-const modalResult = document.querySelector('.modal-result');
-const doneButton = document.querySelector('.done-button');
-const resultSection = document.querySelector('.result-section');
-const searchResults = document.querySelector('.search-results');
+document.addEventListener("DOMContentLoaded", () => {
+  const modalOverlay = document.querySelector(".modal-overlay");
+  const modal = document.querySelector(".modal");
+  const modalForm = document.querySelector(".modal-form");
+  const doneButton = document.querySelector(".done-button");
+  const searchButton = document.querySelector(".search-button");
+  const addNewButton = document.querySelector(".add-new-button");
+  const searchInput = document.querySelector(".search-input");
+  const modalResult = document.querySelector(".modal-result");
+  const searchResultsContainer = document.querySelector(".search-results");
 
-searchButton.addEventListener('click', handleSearch);
-addNewButton.addEventListener('click', openModal);
-modalForm.addEventListener('submit', handleShortenURL);
-doneButton.addEventListener('click', closeModal);
+  getAllURLs()
+  .then((data) => {
+    console.log(data)
+    showSearchResults(data);
+  })
+  .catch((error) => {
+    showError(error);
+  });
 
-function handleSearch(event) {
-  event.preventDefault();
-  const searchTerm = searchInput.value.trim();
-  if (searchTerm === '') {
-    return;
-  }
-  searchURLs(searchTerm);
-}
+  modalForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const urlInput = document.querySelector(".url-input");
+    const noteInput = document.querySelector(".note-input");
+    const url = urlInput.value;
+    const note = noteInput.value;
 
-const searchURLs = (term) => {
-  fetch(`/search?term=${encodeURIComponent(term)}`)
-    .then(response => {
-      if (!response.ok) {
-        throw Error(response.statusText);
-      }
-      return response.json();
-    })
-    .then(data => {
-      while (searchResults.hasChildNodes()) {
-        searchResults.removeChild(searchResults.lastChild);
-      }
-
-      if (data.results.length === 0) {
-        searchResults.insertAdjacentHTML('afterbegin', `
-          <p>No matching URLs found</p>
-        `);
-        return;
-      }
-
-      const resultsList = document.createElement('ul');
-      data.results.forEach(result => {
-        const listItem = document.createElement('li');
-        const anchor = document.createElement('a');
-        anchor.href = result.original_url;
-        anchor.textContent = `${location.origin}/${result.short_id}`;
-        listItem.appendChild(anchor);
-        resultsList.appendChild(listItem);
+    shortenURL(url, note)
+      .then((data) => {
+        showResult(data);
+      })
+      .catch((error) => {
+        showError(error);
       });
 
-      searchResults.appendChild(resultsList);
-    })
-    .catch(console.error);
-};
+    urlInput.value = "";
+    noteInput.value = "";
+  });
 
-function openModal() {
-  modalOverlay.classList.add('active');
-  modal.classList.add('active');
-}
+  doneButton.addEventListener("click", () => {
+    closeModal();
+  });
 
-function closeModal() {
-  modalOverlay.classList.remove('active');
-  modal.classList.remove('active');
-  modalForm.reset();
-  modalResult.innerHTML = '';
-}
+  addNewButton.addEventListener("click", () => {
+    openModal();
+  });
 
-function handleShortenURL(event) {
-  event.preventDefault();
-  const urlInput = modalForm.querySelector('.url-input');
-  const url = urlInput.value.trim();
-  if (url === '') {
-    return;
+  searchButton.addEventListener("click", () => {
+    const searchTerm = searchInput.value;
+    searchURLs(searchTerm)
+      .then((data) => {
+        showSearchResults(data);
+      })
+      .catch((error) => {
+        showError(error);
+      });
+
+    searchInput.value = "";
+  });
+
+  function getAllURLs() {
+    return fetch("/all")
+      .then((response) => response.json())
+      .then((data) => {
+        return data.results;
+      });
   }
-  shortenURL(url);
-}
-const shortenURL = (term) => {
-  const input = modalForm.querySelector('.url-input');
-  fetch('/new', {
-    method: 'POST',
-    headers: {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      url: input.value,
+
+  function shortenURL(url, note) {
+    return fetch("/new", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ url, note }),
     })
-  })
-    .then(response => {
-      if (!response.ok) {
-        console.log('hihi')
-        throw Error(response.statusText);
-      }
-      return response.json();
-    })
-    .then(data => {
-      const resultHTML = `
-        <div class="result">
-          <a target="_blank" class="short-url" rel="noopener" href="/${data.short_id}">
-            ${location.origin}/${data.short_id}
-          </a>
-        </div>`
-        modalResult.innerHTML = resultHTML;
-    })
-    .catch(console.error)
-}
+      .then((response) => response.json())
+      .then((data) => {
+        return data;
+      });
+  }
+
+  function searchURLs(term) {
+    return fetch(`/search?term=${term}`)
+      .then((response) => response.json())
+      .then((data) => {
+        return data.results;
+      });
+  }
+
+  function openModal() {
+    modalOverlay.style.display = "block";
+    modal.style.display = "block";
+  }
+
+  function closeModal() {
+    modalOverlay.style.display = "none";
+    modal.style.display = "none";
+    modalResult.innerHTML = "";
+  }
+
+  function showError(error) {
+    modalResult.innerHTML = `<p class="error">${error}</p>`;
+  }
+
+  function showResult(data) {
+    console.log(data)
+    if (data.urlExists) {
+      modalResult.innerHTML = `
+        <p class="error">URL already exists!</p>
+        <p>Shortened URL: <a href="${data.short_id}" target="_blank">${data.short_id}</a></p>
+        <p>Note: ${data.note}</p>
+      `;
+    } else {
+      modalResult.innerHTML = `
+        <p>Shortened URL: <a href="${data.short_id}" target="_blank">${data.short_id}</a></p>
+        <p>Note: ${data.note}</p>
+      `;
+    }
+  }
+
+  function showSearchResults(results) {
+    searchResultsContainer.innerHTML = "";
+
+    if (results.length === 0) {
+      searchResultsContainer.innerHTML = "<p>No results found.</p>";
+      return;
+    }
+
+    results.forEach((result) => {
+      const resultCard = document.createElement("div");
+      resultCard.classList.add("result-card");
+
+      const title = document.createElement("h3");
+      const titleLink = document.createElement("a");
+      titleLink.href = result.short_id;
+      titleLink.target = "_blank";
+      titleLink.innerText = result.short_id;
+      title.appendChild(titleLink);
+
+      const originalURL = document.createElement("p");
+      originalURL.innerHTML = `Original URL: <a href="${result.original_url}" target="_blank">${result.original_url}</a>`;
+
+      const note = document.createElement("p");
+      note.innerText = `Note: ${result.note}`;
+
+      const clicks = document.createElement("p");
+      clicks.innerText = `Clicks: ${result.clicks}`;
+
+      resultCard.appendChild(title);
+      resultCard.appendChild(originalURL);
+      resultCard.appendChild(note);
+      resultCard.appendChild(clicks);
+
+      searchResultsContainer.appendChild(resultCard);
+    });
+  }
+});
