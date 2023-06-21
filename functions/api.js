@@ -4,19 +4,19 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const path = require("path");
 const { MongoClient } = require("mongodb");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const nanoid = require("nanoid");
 const databaseUrl = process.env.DATABASE;
 const secretKey = process.env.SECRET_KEY;
 const dns = require("dns");
-
+const serverless = require("serverless-http")
 const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
 app.use(express.static(path.join(__dirname, "public")));
-
+const router = express.Router()
 const client = new MongoClient(databaseUrl);
 
 const db = client.db();
@@ -53,7 +53,7 @@ const checkIfShortIdExists = (code) =>
 const incrementClicks = (code) =>
   shortenedURLs.findOneAndUpdate({ short_id: code }, { $inc: { clicks: 1 } });
 
-app.post("/register", async (req, res) => {
+  router.post("/register", async (req, res) => {
   const { username, password } = req.body;
   const existingUser = await usersCollection.findOne({ username });
   if (existingUser) {
@@ -68,7 +68,7 @@ app.post("/register", async (req, res) => {
   res.status(201).json({ message: "User registered successfully" });
 });
 
-app.post("/login", async (req, res) => {
+router.post("/login", async (req, res) => {
   const { username, password } = req.body;
   const user = await usersCollection.findOne({ username });
   if (!user) {
@@ -84,7 +84,7 @@ app.post("/login", async (req, res) => {
   res.status(200).json({ token });
 });
 
-app.get("/verify", (req, res) => {
+router.get("/verify", (req, res) => {
   const token = req.headers.authorization.trim();
   if (!token) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -100,7 +100,7 @@ app.get("/verify", (req, res) => {
   });
 });
 
-app.get("/autocomplete", (req, res) => {
+router.get("/autocomplete", (req, res) => {
   const searchTerm = req.query.term;
 
   if (!searchTerm) {
@@ -138,7 +138,7 @@ app.get("/autocomplete", (req, res) => {
   }
 });
 
-app.post("/new", (req, res) => {
+router.post("/new", (req, res) => {
   const token = req.headers.authorization.trim();
   if (!token) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -185,7 +185,7 @@ app.post("/new", (req, res) => {
   });
 });
 
-app.get("/all", (req, res) => {
+router.get("/all", (req, res) => {
   const token = req.headers.authorization.trim();
   if (!token) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -209,7 +209,7 @@ app.get("/all", (req, res) => {
     });
 });
 
-app.get("/search", (req, res) => {
+router.get("/search", (req, res) => {
   const token = req.headers.authorization.trim();
   if (!token) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -247,7 +247,7 @@ app.get("/search", (req, res) => {
     });
 });
 
-app.get("/:short_id", (req, res) => {
+router.get("/:short_id", (req, res) => {
   const shortId = req.params.short_id;
 
   checkIfShortIdExists(shortId)
@@ -261,12 +261,8 @@ app.get("/:short_id", (req, res) => {
     .catch(console.error);
 });
 
-app.get("/", (req, res) => {
-  const htmlPath = path.join(__dirname, "public", "index.html");
-  res.sendFile(htmlPath);
+router.get("/", (req, res) => {
+  res.json({'name': 'sahaj'})
 });
-
-app.set("port", process.env.PORT || 4100);
-const server = app.listen(app.get("port"), () => {
-  console.log(`Express running → PORT ${server.address().port}`);
-});
+app.use('/.netlify/functions/api', router)
+module.exports.handler = serverless(app)

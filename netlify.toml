@@ -1,0 +1,7 @@
+[build]
+  functions = "functions"
+
+[[redirects]]
+  to="/.netlfy/functions/api/:splat"
+  from="/*"
+  status=200
